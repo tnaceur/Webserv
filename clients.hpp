@@ -6,10 +6,4 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-class client
-{
-    int a = socket(AF_INET, SOCK_STREAM, 0);
-
-};
-
 #endif

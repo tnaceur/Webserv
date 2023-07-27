@@ -1,45 +1,59 @@
 #include "includes.hpp"
+#include <cstddef>
 #include <cstdio>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <string>
 #include <sys/socket.h>
+#include <unistd.h>
+
+const char * response = "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: text/html\r\n"
+                        "Content-Length: 12\r\n"
+                        "\r\n"
+                        "Hello, World!";
 
 int  main(int ac, char **av)
 {
-    int web_socket = socket(AF_INET, SOCK_STREAM, 0);
-    /* socket() creat new socket and return the socket descriptor */
-    if (web_socket < 0)
-        return (void)(std::cerr << "socket error: \n"), 1;
-    /* sockaddr_in is a sturct that contain information about the server it's 'ip, port' ... */
-    sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    if (inet_pton(AF_INET, "127.0.0.1", &(addr.sin_addr)) < 0)
-        return (void)(std::cerr << "Invalid address.\n"), 1;
-    addr.sin_port = htons(8888);
-    if (bind(web_socket, (struct sockaddr*)(&addr), sizeof(addr)) < 0)
-        return (void)(perror(NULL)), 1;
-    listen(web_socket, 10);
-    int client;
-    sockaddr_in clientAddr;
-    socklen_t client_lenght = sizeof(clientAddr);
+    WebServ webserv;
+    int web_socket;
+    int error;
+    struct addrinfo *addr;
+    struct addrinfo hint;
+    hint.ai_family = AF_UNSPEC;
+    hint.ai_socktype = SOCK_STREAM;
+    hint.ai_flags = AI_PASSIVE;
+    for (int i = 0; i < 1; i++)
+    {
+        if (getaddrinfo("127.0.0.1", "8080", &hint, &addr) < 0)
+            return (void)(std::cerr << "Invalid address.\n"), 1;
+        for (struct addrinfo *tmp = addr; tmp; tmp = tmp->ai_next)
+        {
+            web_socket = socket(tmp->ai_family, tmp->ai_socktype, tmp->ai_protocol);
+            error = bind(web_socket, tmp->ai_addr, tmp->ai_addrlen);
+            if (error != -1)
+                break ;
+            close(web_socket);
+        }
+        if (error == -1)
+            return ((void)(perror(NULL)), (void)close(web_socket) , 1);
+        listen(web_socket, 10);
+        webserv.sockets.push_back((Multiplexing){.is_server = true, .sock_id = web_socket});
+    }
     while (1)
     {
-       client = accept(web_socket, (struct sockaddr*)(&addr), &client_lenght);
-       const char * response = "HTTP/1.1 200 OK\r\n"
-                          "Content-Type: text/html\r\n"
-                          "Content-Length: 12\r\n"
-                          "\r\n"
-                          "Hello, World!";
-        if (client < 0) {
+        
+        webserv.sockets.push_back((Multiplexing){.is_server = false, .sock_id = accept(webserv.sockets[0].sock_id, NULL, NULL)}); 
+        if (webserv.sockets.back().sock_id < 0)
+        {
             std::cerr << "Failed to accept connection." << std::endl;
             return 1;
         }
         else
-           send(client, response, strlen(response), 0);
+           send(webserv.sockets.back().sock_id, response, strlen(response), 0);
+        close(webserv.sockets.back().sock_id);
+        webserv.sockets.pop_back();
     }
-    close(client);
     close(web_socket);
     return 0;
-    
 }
-
