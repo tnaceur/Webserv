@@ -1,6 +1,7 @@
 #include "includes.hpp"
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <string>
@@ -13,7 +14,7 @@ const char * response = "HTTP/1.1 200 OK\r\n"
                         "\r\n"
                         "Hello, World!";
 
-int  main(int ac, char **av)
+int  main1(int ac, char **av)
 {
     WebServ webserv;
     int web_socket;
@@ -36,7 +37,7 @@ int  main(int ac, char **av)
             close(web_socket);
         }
         if (error == -1)
-            return ((void)(perror(NULL)), (void)close(web_socket) , 1);
+            return ((void)(perror(NULL)), (void)close(web_socket), freeaddrinfo(addr), 1);
         listen(web_socket, 10);
         webserv.sockets.push_back((Multiplexing){.is_server = true, .sock_id = web_socket});
     }
@@ -56,4 +57,10 @@ int  main(int ac, char **av)
     }
     close(web_socket);
     return 0;
+}
+
+int main(int ac, char **av)
+{
+    main1(ac, av);
+    system("leaks Webserv");
 }
