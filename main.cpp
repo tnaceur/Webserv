@@ -14,7 +14,7 @@ const char * response = "HTTP/1.1 200 OK\r\n"
                         "\r\n"
                         "Hello, World!";
 
-int  main1(int ac, char **av)
+int  main(int ac, char **av)
 {
     WebServ webserv;
     int web_socket;
@@ -57,10 +57,4 @@ int  main1(int ac, char **av)
     }
     close(web_socket);
     return 0;
-}
-
-int main(int ac, char **av)
-{
-    main1(ac, av);
-    system("leaks Webserv");
 }
