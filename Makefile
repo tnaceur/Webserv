@@ -1,23 +1,56 @@
 NAME = Webserv
-CPP = c++
-F	= -fsanitize=address -fsanitize=undefined
-CPPFLAGS = #-Wall -Wextra -Werror -std=c++98
 
-SRCS = $(wildcard *.cpp)
+CC = c++
 
-RM = rm -rf
-OBJS = $(SRCS:.cpp=.o)
+PREFIX_FOLDER := $(shell pwd)
+CONFIG_FILE   := $(addsuffix /cfg/webserv.cfg,$(PREFIX_FOLDER))
 
-all : $(NAME)
+CPPFLAGS :=  -D DEFAULT_CONF=\"$(CONFIG_FILE)\"
 
-$(NAME) : $(OBJS)
-	$(CPP) $(CPPFLAGS) $(OBJS) -o $(NAME)
 
-clean :
-		$(RM) $(OBJS)
+UTILITY :=  source/utility/location_data.cpp\
+			source/utility/server_data.cpp \
+			source/utility/utils.cpp
 
-fclean : clean
-	$(RM) $(NAME)
-re : fclean all
+HTTP   := source/www/socket.cpp \
+		  source/www/request.cpp \
+		  source/www/response.cpp \
+		  source/www/client.cpp
+		  
 
-.PHONY:all clean fclean re
+CORE := source/Webserv-core.cpp \
+		source/core/config.cpp \
+		source/core/optioneer.cpp \
+		source/core/server.cpp
+
+SRCS =  $(CORE) \
+		$(UTILITY) \
+		$(HTTP)
+
+# OBJS	 := $(SRCS:%.cpp=%.o)
+
+
+show :
+	clear && echo "Find config file cfg at : $(CONFIG_FILE)" && rm -f $(NAME)
+
+server : $(SRCS)
+	@$(CC) -g $(CPPFLAGS) $^ -o $(NAME)
+
+rs : show server
+	
+
+
+
+all: $(NAME)
+
+$(NAME): $(OBJS)
+	$(CC) $(CPPFLAGS) -o $(NAME) $^
+
+%.o: %.cpp 
+	$(CC) $(CPPFLAGS) $< -o $@
+
+clean:
+	rm -f $(OBJS)
+fclean: clean
+	rm -f $(NAME)
+re: fclean all
