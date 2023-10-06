@@ -34,7 +34,7 @@ show :
 	clear && echo "Find config file cfg at : $(CONFIG_FILE)" && rm -f $(NAME)
 
 server : $(SRCS)
-	@$(CC) -g $(CPPFLAGS) $^ -o $(NAME)
+	@$(CC) -g $(CPPFLAGS) -std=c++20 $^ -o $(NAME)
 
 rs : show server
 	

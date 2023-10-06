@@ -66,6 +66,24 @@ class Socket {
             return _socketfd > other._socketfd ? _socketfd : other._socketfd;
         }
 
+        Socket() {}
+        // copy constructor
+        Socket(const Socket& other)
+        {
+            *this = other;
+        }
+        // copy assignment operator
+        Socket& operator=(const Socket& other)
+        {
+            if (this != &other) // self-assignment check expected
+            {
+                // do the copy
+                this->_socketfd = other._socketfd;
+                this->Address = other.Address;
+            }
+            return *this;
+        }
+
     private :
         socket_t    _socketfd;
         server_data Address;
