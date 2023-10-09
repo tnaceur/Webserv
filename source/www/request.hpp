@@ -21,11 +21,12 @@ class request
             std::cout << "request constructor" << std::endl;
             counte = 0;
             chunkSize = 0;
-            stream = new std::stringstream();
+            ready = false;
+            file.open("file", std::ios_base::trunc);
         };
         ~request() {
             std::cout << "request destructor" << std::endl;
-            delete stream;
+            file.close();
          };
         // copy constructor
         request(const request& other)
@@ -39,7 +40,7 @@ class request
             if (this != &other) // self-assignment check expected
             {
                 // do the copy
-                this->stream = other.stream;
+                this->stream.str(other.stream.str());
                 this->request_string = other.request_string;
                 this->httpMethod = other.httpMethod;
                 this->path_ = other.path_;
@@ -58,7 +59,7 @@ class request
 
 
     private :
-        stringstream  *stream;
+        stringstream  stream;
         std::string   request_string;
         METHODS       httpMethod;
         string        path_;
@@ -69,6 +70,7 @@ class request
         int           counte;
         long           chunkSize;
         void get_chunk_size();
+        ofstream file;
         // body
     
 };
