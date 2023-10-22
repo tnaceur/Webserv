@@ -1,78 +1,82 @@
-# ifndef _REQUEST_H_
-# define _REQUEST_H_
+# ifndef __REQUEST_H__
+# define __REQUEST_H__
 
-# include "../core/config.hpp"
-# include "socket.hpp"
-# include "Header.hpp"
-#include <cstddef>
-#include <iostream>
-#include <sstream>
+# include "server-core.hpp"
 
-enum METHODS {
-    GET,
-    POST ,
-    DELETE 
-};
+# define REQUEST_LINE          (1 << 1)
+# define REQUEST_BODY          (1 << 2)
+# define REQUEST_SETUP         (1 << 3)
+# define REQUEST_HEADER        (1 << 4)
+# define REQUEST_PARSE_DONE    (1 << 5)
 
-class request 
-{
-    public :
-        request() {
-            std::cout << "request constructor" << std::endl;
-            counte = 0;
-            chunkSize = 0;
-            ready = false;
-            file.open("file", std::ios_base::trunc);
-        };
-        ~request() {
-            std::cout << "request destructor" << std::endl;
-            file.close();
-         };
-        // copy constructor
-        request(const request& other)
-        {
+typedef unsigned long long t_size;
+
+class requestBody;
+class request {
+
+    private :
+        mutable short   _stat;
+        mutable short   _httpCodeSatus;
+        mutable bool    _isChunked;
+        mutable short   _type;
+
+    public   :
+
+        METHODS        _method;
+        string         _path;
+        string         _line;
+        string         _query;
+        Header         _header;
+        requestBody    _body;
+
+        void   reset();
+        short  _get_request_stat_(void) const;
+        short  _get_http_code_status_(void) const;
+        short  _unacceptable_request_(void) const;
+
+        bool  _request_is_done_(void) const;
+        bool  _requestChunked_(void) const;
+        bool  likeness(short) const;
+        bool  likeness_(short) const;
+        bool  TooLarge(const t_size &);
+
+        size_t Uploaded(void) const ;
+
+        string normalization(const string &, const char sep = (char)47);
+        void UpdateStatus(short);
+        void interpretRequest( stringstream & );
+        void parseReaquestLine(string );
+        void parseHeader(string ); 
+
+        request() : _path("") , _line(""), _query("") {
+           _stat = REQUEST_SETUP;
+           _httpCodeSatus = 0;
+           _method = UNKNOWN_MT;
+           _isChunked = false;
+        }
+
+        request(const request &other) {
             *this = other;
         }
-        // copy assignment operator
-        request& operator=(const request& other)
-        {
-            std::cout << "request copy constructor " << std::endl;
-            if (this != &other) // self-assignment check expected
-            {
-                // do the copy
-                this->stream.str(other.stream.str());
-                this->request_string = other.request_string;
-                this->httpMethod = other.httpMethod;
-                this->path_ = other.path_;
-                this->line_ = other.line_;
-                this->query_ = other.query_;
-                this->header_ = other.header_;
-                this->ready = other.ready;
-                this->counte = other.counte;
-                this->chunkSize = other.chunkSize;
+
+        request &operator=(const request &other) {
+            if (this != &other) {
+                _stat = other._stat;
+                _httpCodeSatus = other._httpCodeSatus;
+                _method = other._method;
+                _path = other._path;
+                _isChunked = other._isChunked;
+                _type = other._type;
+                _line = other._line;
+                _query = other._query;
+                _header = other._header;
+                _body = other._body;
             }
             return *this;
         }
-        void parseRequest(socket_t fd);
-        bool isReady() { return ready; };
-        void chunkedRequest();
 
-
-    private :
-        stringstream  stream;
-        std::string   request_string;
-        METHODS       httpMethod;
-        string        path_;
-        string        line_;
-        string        query_;
-        Header        header_;
-        bool          ready;
-        int           counte;
-        long           chunkSize;
-        void get_chunk_size();
-        ofstream file;
-        // body
-    
 };
+
+extern const char *methods[];
 
 # endif

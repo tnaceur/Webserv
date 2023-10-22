@@ -1,83 +1,54 @@
-# ifndef _CLIENT_H_
-# define _CLIENT_H_
+# ifndef __CLIENT_H__
+# define __CLIENT_H__
 
-# include "../core/config.hpp"
-# include "socket.hpp"
-# include "request.hpp"
-# include "response.hpp"
-#include <vector>
+# include "server-core.hpp"
+class s_client {
 
-class response ; // waitng for creat
-class request  ; // waiting for creat
-
-class s_client
-{
     private :
-        response res_;
-        request  req_;
-    
-        pid_t     _pid; // for cgi
-        int       _fds[2]; // for cgi
-        socket_t _newconnection; // new client
-        socket_t _server_socket; // server socket
-        int       _server_idx; // server index
-
+        request  req;      
+        socket_t newconnection;
+        socket_t server_socket;
 
     public :
-        // copy constructor
-        s_client(const s_client& other)
-        {
-            *this = other;
-        }
-        // copy assignment operator
-        s_client& operator=(const s_client& other)
-        {
-            std::cout << "client copy constructor " << std::endl;
-            if (this != &other) // self-assignment check expected
-            {
-                // do the copy
-                this->_pid = other._pid;
-                this->_fds[0] = other._fds[0];
-                this->_fds[1] = other._fds[1];
-                this->_newconnection = other._newconnection;
-                this->_server_socket = other._server_socket;
-                this->_server_idx = other._server_idx;
-                this->req_ = other.req_;
-                this->res_ = other.res_;
-            }
-            return *this;
-        }
-        s_client() {
-            std::cout << "Client Constructor" << std::endl;
-        };
-        ~s_client() { 
-            std::cout << "Client Destructor" << std::endl;
-        };
 
-        s_client(socket_t newconnection);
-        
-        void set_server_idx(int idx, int server_socket);
+        socket_t    server_idx;
+        response    res;
+        # ifndef __ADDRESS__
+            # define SERVER_ADDRESS (&_socket[clients[c].server_idx].get_server_address())
+            # define MAX_BYTES_RECV 2048
+        # endif
+        void DealwithRequest( stringstream *,const server_data *);
+        void DealwithResponce(const server_data *_vts = __null);
 
+        void     set_server_idx(socket_t, socket_t);
         socket_t get_client_socket();
 
-        void DealwithRequest(  void );
-        void DealwithResponce( void );
-        bool isReady() { return req_.isReady();};
-        void Expireconnection() {
-            // std::cout << "they got here" << std::endl;
-            // exit(EXIT_FAILURE); // hhhhhhh debug about 20 min fuck
-            // waiting to remove iterator and close the fd
+        void reset ();
+        bool clientDone() const;
+        bool request_done() const;
+        s_client();
+       ~s_client();
+        s_client(socket_t);
+
+
+    s_client &operator=(const s_client &other) {
+        if (this != &other) {
+            this->req = other.req;
+            this->newconnection = other.newconnection;
+            this->server_socket = other.server_socket;
+            this->server_idx = other.server_idx;
+            this->res = other.res;
         }
+        return *this;
+    }
+
+    s_client(const s_client& other) {
+        *this = other;
+    }
+
+
 };
 
-// class Clients : public map<socket_t , s_client>
-// {
-//     public :
-//         Clients() {}
-
-// };
-
-// extern Clients clients;
-extern std::vector<s_client> clients;
+extern vector<s_client> clients;
 
 # endif

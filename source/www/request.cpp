@@ -1,177 +1,194 @@
-# include "request.hpp"
-#include <cstddef>
-#include <cstdio>
-#include <cstdlib>
-#include <exception>
-#include <fstream>
-#include <iostream>
-#include <ostream>
-#include <regex>
-#include <sstream>
-#include <string>
-#include <strings.h>
-#include <sys/_types/_off_t.h>
-#include <sys/_types/_size_t.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <vector>
+# include "server-core.hpp"
 
+const char *methods[] = { "GET", "POST", "DELETE", "UNKNOWN" };
 
-// std::ofstream f1("taha", std::ios::trunc);
+void request::interpretRequest(stringstream &stream) {
+    string buff;
+    char   c;
 
-
-long hexToDec(std::string hex)
-{
-    std::stringstream ss;
-    ss << std::hex << hex;
-    long decimal;
-    ss >> decimal;
-    if (ss.fail() || ss.bad())
-        throw std::invalid_argument(hex /*"invalid hex number."*/);
-    return decimal;
-}
-
-void request::get_chunk_size()
-{
-    size_t f = stream.str().find("\r\n");
-    if (f == std::string::npos)
-        throw  stream.str().find("\r\n");
-    std::string chunk = stream.str().substr(0, (f == 1) ? 1 : f - 1);
-    char *end;
-    chunkSize = hexToDec(chunk);
-    // chunkSize = strtol(chunk.c_str(), &end, 16);
-    // if (*end != '\0')
-    //     throw 99;
-    f = stream.str().find("\r\n");
-    if (f + 2 < stream.str().length())
-        stream.str(stream.str().substr(stream.str().find("\r\n") + 2));
-    else
-        stream.str("");
-    if (chunkSize == 0)
+    while (!stream.get(c).eof() and _stat & ~(REQUEST_PARSE_DONE | UNACCEPTABLE_REQUEST) )
     {
-        ready = true;
-        file.close();
-        return ;
+        buff.push_back(c);
+        if (_stat & REQUEST_BODY) {
+            int seek = stream.tellg();
+			stream.seekg(seek - 1);
+            _body.absorb_stream(stream);
+
+            _stat = (_body._status & BODY_SUCCESSFUL) ? REQUEST_PARSE_DONE : _stat;
+            _stat = (_body._status & UNACCEPTABLE_REQUEST) ? UNACCEPTABLE_REQUEST : _stat;
+
+            return ;
+        }
+        if (_stat & REQUEST_SETUP and (buff == LF or buff == CR)) // begin empty line
+            buff.clear();
+        if (_stat & REQUEST_SETUP and c == '\n' and buff.length() > 1) 
+            UpdateStatus(REQUEST_LINE);
+        if (_stat & REQUEST_HEADER and c != '\n')
+            continue;
+        switch (_stat) {
+            case REQUEST_LINE :
+                parseReaquestLine(buff);
+                buff.clear();
+                break;
+            case REQUEST_HEADER:
+                parseHeader(buff);
+                if (_body._status & BODY_SUCCESSFUL)
+                    _stat = REQUEST_PARSE_DONE;
+                buff.clear();
+                break;
+        }
     }
 }
 
-void request::chunkedRequest()
-{
+void request::parseHeader(string target) {
 
-    // if (chunkSize == 0)
-    // {
-        
-    //     // std::string chunk = stream.str().substr(0, stream.str().find("\r\n"));
-    //     // char *end;
-    //     // chunkSize = strtol(chunk.c_str(), &end, 16);
-    //     // stream.str(stream.str().substr(stream.str().find("\r\n") + 2));
-    //     // // std::cout << "new length :: " << stream.str().length() << std::endl;
-    //     // // cout << "chunkSize = " << chunkSize << std::endl;
-    //     // if (chunkSize == 0)
-    //     // {
-    //     //     ready = true;
-    //     //     return ;
-    //     // }
-    // }
+    string value, key;
+    stringstream stream(target);
+
+    if (target == CRLF or target == LF) {
+        short _st = _method & (GET|DELETE) ? REQUEST_PARSE_DONE : REQUEST_BODY;
+
+        if (_st & REQUEST_BODY) {
+            _body.FindBodyStatus(this->_header);
+            _type = _body._status & (MULTIPART_BODY | CHUNKED_BODY | LENGTH_BODY | BODY_SUCCESSFUL) ? _body._status : 0;
+            if (_body._status & ~MULTIPART_BODY) {
+                _body.bodyPath = "/tmp/.serveX__" + to_string(set_time()) + "__.upload";
+                _body.bodycontent = s_open(_body.bodyPath);
+            }
+        }
+        _isChunked = (!_header.get("Transfer-Encoding").empty());
+        return UpdateStatus(_body._status & UNACCEPTABLE_REQUEST ? UNACCEPTABLE_REQUEST : _st);
+    }
+    getline(stream, key, ':');
+    getline(stream, value, (char)0);
+    trim(key, "\r\n \t");    
+    trim(value, "\r\n \t");
+    if (key.empty() or value.empty())
+        return ;
+    return _header.adding(key, value);
+}
+
+string request::normalization(const string &path, const char sep)
+{
+    deque<string> components;
+    string        component;
+    string        normPath = (path[0] == sep) ? "/" : "", buff;
+    stringstream  stream(path);
+
+    getline(stream, buff , sep);
+    while (getline(stream, buff, sep))
+    {
+        string::size_type idx = buff.find_first_not_of(" \t\n\r\f\v");
+        if (buff == "." or buff.empty() or idx == string::npos)
+            continue;
+        buff = buff.substr(idx);
+        if (buff == "..")
+            components.empty() ? throw UNACCEPTABLE_REQUEST : components.pop_back();
+        else
+            components.push_back(buff);
+    }
+    deque<string>::iterator it = components.begin();
+    while (it != components.end())
+        normPath.append(it != components.begin() ? "/" : ""), normPath.append(*it), it ++;
+    transform(normPath.begin(), normPath.end(), normPath.begin(), ::tolower);
+    if (path.length() and path[path.length() - 1]  == '/')
+        normPath = joinPath(normPath);
+    return (components.clear(), normPath);
+}
+
+void request::parseReaquestLine(string req_line)
+{
+    stringstream _stream(req_line);
+    string method, url, httpV, extractPath;
+
+    _stream >> method >> url >> httpV;
     try {
-        if (chunkSize < stream.str().length())
-        {
-            std::stringstream tmp;
-            tmp.str(stream.str().substr(0, chunkSize));
-            file << tmp.str();
-            stream.str(stream.str().substr(chunkSize + 2));
-            chunkSize = hexToDec(stream.str());
-            if (chunkSize == 0)
-                ready = true;
-//                UpdateStatus(BODY_STATUS | BODY_DONE);
-            stream.str(stream.str().substr(stream.str().find("\r\n") + 2));
-        }
-        if (chunkSize - stream.str().length() >= stream.str().length())
-        {
-            chunkSize -= stream.str().length();
-//            s_write(bodycontent, stream);
-            file << stream.str();
-            stream.str("");
-        }
-//        if (chunkSize == 0)
-//            get_chunk_size();
-//        if (chunkSize && chunkSize > stream.str().length())
-//        {
-//            std::cout << "<<" << chunkSize<< " > " << stream.str().length() << ">>"  << std::endl;
-//            return ;
-//        }
-//        if (chunkSize && chunkSize <= stream.str().length())
-//        {
-//            std::cout << "<<" << chunkSize<< " == " << stream.str().length() << ">>"  << std::endl;
-//            std::string chunk = stream.str().substr(0, chunkSize);
-//            if (int pos = chunk.find("\r\n") != std::string::npos)
-//                cout << "there is in  = " << pos << std::endl;
-//            file << chunk;
-//            if (stream.str().length() > chunkSize + 2)
-//                stream.str(stream.str().substr(chunkSize + 2));
-//            else
-//                stream.str("");
-//            chunkSize = 0;
-//            // if (stream.str().empty())
-//            //     return ;
-//        }
+        string::size_type idx;
+        idx = url.find_first_of('?');
+        _query += (idx == string::npos) ? "" : url.substr(idx + 1);
+        extractPath = url.substr(0, idx);
+        _path = normalization(extractPath);
+        if (url.size() > 2048 or httpV != HTTP_VERSION)
+            throw (url.size() > 2048) ? HTTP_REQUEST_URI_TOO_LONG : HTTP_VERSION_NOT_SUPPORTED;        
+        for (int i = 0; i < METHODS_LENGHT ; i++)
+            if (methods[i] == method)
+                _method = (METHODS)pow(2, i + 1);
+        if (_method & UNKNOWN_MT)
+            throw HTTP_METHOD_NOT_ALLOWED;
+
     }
-    catch (size_t i)
-    {
-        std::cout << "exception " << i << std::endl;
+    catch (int _st) {
+        _httpCodeSatus  = _st;
+        UpdateStatus(UNACCEPTABLE_REQUEST);
     }
-    catch (std::exception& e)
-    {
-        std::cout << e.what() << std::endl;
-    }
-    
+    UpdateStatus(REQUEST_HEADER);
+}
+
+bool  request::TooLarge(const t_size &Maxbytes) {
+
+    string contentlenght;
+    contentlenght = _header.get("Content-Length");
+
+    trim(contentlenght);
+    if (contentlenght.empty() or !every(contentlenght.begin(), contentlenght.end(), ::isdigit))
+        return false;
+    const t_size resvbytes = stol(contentlenght);
+    return resvbytes > Maxbytes;
+}
+
+void request::UpdateStatus(short _st)
+{
+    _stat = _st;
 }
 
 
-void request::parseRequest(socket_t fd)
-{
-    // struct stat fileStat;
 
-    char buffer[1024];
-    
-    int f;
-    bzero(buffer, 1024);
-    f = read(fd, buffer, 1023);
-    if (f < 0)
-    {
-        perror("read");
-        return ;
-    }
-    buffer[f] = '\0';
-    counte++;
-    // std::ostream os()
-    stream.write(buffer, f);
-    // stream.write(buffer, f);
-    if (counte == 1)
-        request_string = buffer;
-    if (request_string.find("Transfer-Encoding: chunked") != std::string::npos)
-    {
-        if (counte == 1 && request_string.find("\r\n\r\n") != std::string::npos)
-        {
-            stream.str(stream.str().substr(stream.str().find("\r\n\r\n") + 4));
-            chunkSize = hexToDec(stream.str());
-            stream.str(stream.str().substr(stream.str().find("\r\n") + 2));
-        }
-        chunkedRequest();
-        return;
-    }
-    // if (counte == 1 && request_string.find("POST") == std::string::npos)§
-    // {
-    //     ready = true;
-    //     return ;
-    // }
-    // if (fileStat.st_size == 0) {
-    //     // cout << counte << endl;
-    //     counte = 0;
-    //     ready = true;
-    //     ofstream uu("hello", std::ios::trunc);
-    //     uu << stream->str();
-    // }
+short request::_unacceptable_request_( void ) const {
+    if (_httpCodeSatus)
+        return _httpCodeSatus;
+    if (_stat & (UNACCEPTABLE_REQUEST) )
+        return  (_httpCodeSatus = _stat), true;
+    return false;
+}
+
+bool request::_request_is_done_( void ) const {
+     return  _stat & REQUEST_PARSE_DONE; 
+}
+
+short  request::_get_request_stat_( void ) const {
+    return _stat;
+}
+
+short  request::_get_http_code_status_( void ) const {
+    return _httpCodeSatus;
+}
+
+bool  request::_requestChunked_(void) const {
+    return _isChunked;
+}
+
+bool request::likeness(short _st) const {
+    return _stat & _st;
+}
+
+bool request::likeness_(short _st) const{
+    return _type & _st;
+}
+
+size_t request::Uploaded(void) const {
+    return _body._multipart.size();
+}
+
+void request::reset() {
+
+    _stat = REQUEST_SETUP;
+    _httpCodeSatus = 0;
+    _method = UNKNOWN_MT;
+    _type = 0;
+    _isChunked = false;
+    _path  = "";
+    _query = "" ;
+    _header.clear();
+    _body.reset();   
+
 }
